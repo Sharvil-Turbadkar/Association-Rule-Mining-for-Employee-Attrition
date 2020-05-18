@@ -2,6 +2,7 @@
 Mining Rules to generate insights on why employees tend to leave companies   
 Link to Shiny App:
 https://sharvilt.shinyapps.io/Employee_Attrition_Rule_Mining/
+
 Link TO RPub Documentation:
 https://rpubs.com/Sharvil/employee-attrition
 
