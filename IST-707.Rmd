@@ -1,0 +1,390 @@
+##Association Rule Mining on why employees tend to leave companies  
+###Munging data
+###Loading csv file into a Data frame
+```{r}
+getwd()
+
+employee_attrition<-read.table("C:/Users/Sharvil T/Documents/employee_attrition.csv",header=TRUE,sep=",",stringsAsFactors = F,na.strings = c("","NA"))
+```
+
+```{r}
+library(knitr)
+knitr::opts_chunk$set(message = FALSE,warning=F)
+```
+
+### Loading all Packages
+```{r}
+library(corrplot)
+library(rmarkdown)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(arules)
+library(arulesViz)
+library(ggplot2)
+```
+### Storing in a dummy variable
+```{r}
+employee_attrition->df.employee
+```
+###Checking the structure of the Data
+```{r}
+str(df.employee)
+```
+
+### Columns with missing values 
+```{r}
+
+colnames(df.employee)[colSums((is.na(df.employee)))>0]
+```
+### Returning Columns with NA values
+```{r}
+
+employee_attrition[(is.na(employee_attrition$DistanceFromHome))==T,]
+```
+### Check for missing values
+```{r}
+sum(!complete.cases(df.employee))
+```
+## Imputing NA values
+
+### Distance From Home
+```{r}
+
+mean(df.employee$DistanceFromHome,na.rm=TRUE)->df.employee$DistanceFromHome[is.na(df.employee$DistanceFromHome)]
+```
+### PercentSalaryHike
+```{r}
+df.employee$PercentSalaryHike[is.na(df.employee$PercentSalaryHike)]<-0
+```
+### Performance Rating
+```{r}
+
+df.employee$PerformanceRating[is.na(df.employee$PerformanceRating)]<-median(df.employee$PerformanceRating,na.rm=T)
+```
+### Years Since Last Promotion
+```{r}
+
+df.employee$YearsSinceLastPromotion[is.na(df.employee$YearsSinceLastPromotion)]<-0
+```
+### Total Working Years
+```{r}
+
+df.employee$TotalWorkingYears[is.na(df.employee$TotalWorkingYears)]<-0
+```
+### RelationshipSatisfaction
+```{r}
+
+table(df.employee$RelationshipSatisfaction)
+```
+### RelationShip_Satisfaction
+```{r}
+
+df.employee$RelationshipSatisfaction[is.na(df.employee$RelationshipSatisfaction)]<-4
+```
+
+###Job Level
+```{r}
+
+df.employee$JobLevel[is.na(df.employee$JobLevel)]<-median(df.employee$JobLevel,na.rm=T)
+```
+
+### Replacing NA value with the mode for OverTime
+```{r}
+
+df.employee$OverTime[is.na(df.employee$OverTime)]<-rownames(sort((table(df.employee$OverTime)),decreasing = T))[1]
+```
+###Replacing NA value with the mode for Gender
+```{r}
+
+df.employee$Gender[is.na(df.employee$Gender)]<-rownames(sort((table(df.employee$Gender)),decreasing = T))[1]
+```
+### Columns with missing values
+```{r}
+
+colnames(df.employee)[colSums(is.na(df.employee))>0]
+```
+
+###All NA  values and blank spaces  are now removed 
+### Converting Character to factors
+```{r}
+
+sapply(df.employee, is.character)->char_var
+lapply(df.employee[,char_var],as.factor)-> df.employee[,char_var]
+```
+### Converting int to numeric 
+```{r}
+sapply(df.employee,is.integer)->int_var
+df.employee[,int_var]<-lapply(df.employee[,int_var], as.numeric)
+```
+
+### Removing Columns with little to no Variance
+```{r}
+nzv<-caret::nearZeroVar(df.employee,saveMetrics = T)
+colnames(df.employee)[nzv$nzv]
+```
+
+```{r}
+rmv<-c("EmployeeCount","Over18","StandardHours")
+df.employee<-df.employee[,!names(df.employee) %in% rmv]
+```
+### Removing Employee Number as it is a redundant column
+```{r}
+rmv<-c("EmployeeNumber")
+df.employee<-df.employee[,!names(df.employee) %in% rmv]
+```
+
+###Checking for Duplicate Data
+```{r}
+nrow(df.employee)
+nrow(df.employee[!duplicated(df.employee),])
+```
+### No duplicate data found
+
+### Converting attrition from categorical to numerical variable for building a correlation matrix
+```{r}
+df.employee$AttritionNum<-ifelse(df.employee$Attrition=="Yes",1,0)
+```
+##Descriptive Statistics
+### Building a correlation Matrix as a dignostic for finding key paramters that may cause attrition
+```{r}
+corr_matrix<-cor(df.employee[complete.cases(df.employee),c("AttritionNum","Age","Education","TotalWorkingYears","JobLevel","NumCompaniesWorked","MonthlyIncome","YearsWithCurrManager","YearsInCurrentRole")],method = "pearson")
+corrplot<-corrplot(corr_matrix,type = "lower")
+```
+
+
+### Removing ouliers
+###Plotting Boxplots to chck for Outliers
+```{r}
+boxplot(df.employee$DistanceFromHome,main="Distance from home before removing  outlier ")
+```
+```{r}
+df.employee$DistanceFromHome[df.employee$DistanceFromHome %in% boxplot.stats(df.employee$DistanceFromHome)$out]<-median(df.employee$DistanceFromHome)
+boxplot(df.employee$DistanceFromHome,main="Distance from home after removing  outlier")
+```
+
+```{r}
+boxplot(df.employee$YearsWithCurrManager,main="Years with Current Manager before removing  outlier")
+```
+```{r}
+df.employee$YearsWithCurrManager[df.employee$YearsWithCurrManager%in% boxplot.stats(df.employee$YearsWithCurrManager)$out]<-median(df.employee$YearsWithCurrManager)
+boxplot(df.employee$YearsWithCurrManager,main="Years with Current Manager after removing  outlier")
+```
+
+### Plot to view attrition by Job Roles
+####We can thus say that Sales Representatives earn the Least  while Managers earn the most
+###Thus referring the correlation matrix we can conclude that Sales Representatives are most likely to leave 
+```{r}
+incomeplot<-ggplot(df.employee,aes(x=as.factor(df.employee$JobRole),y=df.employee$MonthlyIncome,fill=JobRole))+geom_bar(stat = "identity")
+incomeplot<-incomeplot+ggtitle("Income by Job Role")+xlab("Job Role")+ylab("Income")+coord_flip()
+incomeplot
+```
+### Income by age
+###As age incraeses Monthly income also increases
+### Younger people get paid less thus they have higher Attrition
+```{r}
+ageplot<- df.employee%>%group_by(Age)%>%summarise(mean=mean(MonthlyIncome),count=n())
+ageplot
+incomeageplot<-ggplot(ageplot,aes(y=ageplot$mean,x=ageplot$Age,fill=ageplot$mean))+geom_bar(stat = "identity")
+incomeageplot<-incomeageplot+ggtitle("Income distribution by Age")+xlab("Age")+ylab("Income")
+incomeageplot
+```
+
+### Histogram depicting Distribution of Income
+### This shows that monthly income is right skewed which means more employees have lesser salaries 
+```{r}
+hist(df.employee$MonthlyIncome,col = "grey",border="black",xlab="Monthly_Income",ylab = "Frequency",main="Distribution of Monthly income")
+abline(v=mean(df.employee$MonthlyIncome),col="red",lwd=3,lty=2)
+abline(v=median(df.employee$MonthlyIncome),col="blue",lwd=3,lty=2)
+legend(x = "topright", # location of legend within plot area
+       c( "Mean", "Median"),
+       col = c( "red","blue"),
+       lwd = c(2, 2),lty=c(2,2))
+```
+### Employees prefer to Travel Rarely on their jobs  
+```{r}
+travel_plot<-ggplot(df.employee,aes(x=(df.employee$BusinessTravel)))+geom_histogram(fill="black",bins=25,stat = "count")
+travel_plot<-travel_plot+ggtitle("Type of Travel ")+xlab("Frequency")+ylab("Count")
+travel_plot
+```
+
+### Histogram depicting Distribution of total number of Working years
+### This shows that employees leave jobs more often than staying with one job
+```{r}
+hist(df.employee$TotalWorkingYears,col="grey",border="black",xlab="Total Working Years",ylab="Frequency",main="Distribution of Total Working Years")
+
+abline(v=mean(df.employee$TotalWorkingYears),col="red",lty=2,lwd=3)
+abline(v=median(df.employee$TotalWorkingYears),col="blue",lty=2,lwd=3)
+legend(x="topright",
+       col=c("red","blue"),legend = c("Mean","Median"),lwd=c(2,2),lty=c(3,3))
+```
+
+
+### Histogram depicting Distribution of distance from home
+### This shows that mostly  employees like to travel lesser distances to get to work
+```{r}
+hist(df.employee$DistanceFromHome,col="grey",border="black",xlab="Distance from Home",ylab="Frequency",main="Distribution of Distance from Home")
+abline(v=mean(df.employee$DistanceFromHome),col="red",lty=2,lwd=3)
+abline(v=median(df.employee$DistanceFromHome),col="blue",lty=2,lwd=3)
+legend(x="topright",
+       col=c("red","blue"),legend = c("Mean","Median"),lwd=c(2,2),lty=c(3,3))
+```
+
+### Distribution of employees on the basis of years spent with the manager
+### Employees tend to be less with a manager concluding that they tend to leave the company more often
+```{r}
+hist(df.employee$YearsWithCurrManager,col="grey",xlab="Years with Manager",ylab="Frequency",main = "Distribution of employees on the basis of years spent with the manager")
+abline(v=mean(df.employee$YearsWithCurrManager),col="red",lty=3,lwd=3)
+abline(v=median(df.employee$YearsWithCurrManager),col="blue",lty=3,lwd=3)
+legend("topright",col=c("red","blue"),legend=c("Mean","Median"),lty=c(3,3),lwd=c(3,3))
+```
+
+###Plottiong to view the effect of Marital Status
+### Thus we can conclude that Single people are more likely to leave 
+```{r}
+marital_plot<-ggplot(df.employee,aes(x=as.factor(df.employee$MaritalStatus),y=df.employee$AttritionNum,fill=MaritalStatus))+geom_bar(stat = "identity")
+marital_plot<-marital_plot+ggtitle("Attrition by Marital Status")+xlab("Marital Status")+ylab("Attrition")+coord_flip()
+
+marital_plot
+```
+
+###Attrition by Job Role
+####We can thus conclude that junior level and upper junior level employees are more likely to attrition
+```{r}
+job_role_plot<-ggplot(df.employee,aes(x=as.factor(df.employee$JobLevel),y=df.employee$AttritionNum,fill=df.employee$JobLevel))+geom_bar(stat = "identity")
+job_role_plot<-job_role_plot+ggtitle("Attrition by Job Role")+xlab("Job")+ylab("Attrition")+coord_flip()
+
+job_role_plot
+```
+
+### Density Plot of work Life balance preference
+### This shows that employees prefer an evenly good work life balance 
+```{r}
+hist(df.employee$WorkLifeBalance,prob=T,col="grey",xlab="Work Life Balance",ylab="Frequency",main="Distribution of Work Life Balance")
+lines(density(df.employee$WorkLifeBalance),col="black",lwd=3)
+```
+
+### Discretizing variables
+```{r}
+df.employee$Age<-arules::discretize(df.employee$Age,breaks = 3,labels = c("Young","Adult","Old"),method = "frequency")
+df.employee$Age<-as.factor(df.employee$Age)
+```
+```{r}
+
+df.employee$DistanceFromHome<-arules::discretize(df.employee$DistanceFromHome,breaks = 3,labels = c("Near","Normal Distance","Distant"),method = "frequency")
+df.employee$DistanceFromHome<-as.factor(df.employee$DistanceFromHome)
+
+df.employee$MonthlyIncome<-arules::discretize(df.employee$MonthlyIncome,breaks = 3,labels = c("Low","Medium","High"),method = "frequency")
+df.employee$MonthlyIncome<-as.factor(df.employee$MonthlyIncome)
+
+df.employee$MonthlyRate<-arules::discretize(df.employee$MonthlyRate,breaks = 3,labels = c("Low","Medium","High"),method = "frequency")
+df.employee$MonthlyRate<-as.factor(df.employee$MonthlyRate)
+
+df.employee$HourlyRate<-arules::discretize(df.employee$HourlyRate,breaks = 3,labels = c("Low","Medium","High"),method = "frequency")
+df.employee$HourlyRate<-as.factor(df.employee$HourlyRate)
+
+df.employee$DailyRate<-arules::discretize(df.employee$DailyRate,breaks = 3,labels = c("Low","Medium","High"),method = "frequency")
+df.employee$DailyRate<-as.factor(df.employee$DailyRate)
+
+df.employee$PercentSalaryHike<-arules::discretize(df.employee$PercentSalaryHike,breaks = 3,labels = c("Low","Medium","High"),method = "frequency")
+df.employee$PercentSalaryHike<-as.factor(df.employee$PercentSalaryHike)
+
+df.employee$YearsAtCompany<-arules::discretize(df.employee$YearsAtCompany,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$YearsAtCompany<-as.factor(df.employee$YearsAtCompany)
+
+df.employee$TotalWorkingYears<-arules::discretize(df.employee$TotalWorkingYears,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$TotalWorkingYears<-as.factor(df.employee$TotalWorkingYears)
+
+df.employee$YearsInCurrentRole<-arules::discretize(df.employee$YearsInCurrentRole,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$YearsInCurrentRole<-as.factor(df.employee$YearsInCurrentRole)
+
+df.employee$YearsSinceLastPromotion<-arules::discretize(df.employee$YearsSinceLastPromotion,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$YearsSinceLastPromotion<-as.factor(df.employee$YearsSinceLastPromotion)
+
+df.employee$YearsWithCurrManager<-arules::discretize(df.employee$YearsWithCurrManager,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$YearsWithCurrManager<-as.factor(df.employee$YearsWithCurrManager)
+
+df.employee$NumCompaniesWorked<-arules::discretize(df.employee$NumCompaniesWorked,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$NumCompaniesWorked<-as.factor(df.employee$NumCompaniesWorked)
+
+df.employee$TrainingTimesLastYear<-arules::discretize(df.employee$TrainingTimesLastYear,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$TrainingTimesLastYear<-as.factor(df.employee$TrainingTimesLastYear)
+
+df.employee$WorkLifeBalance<-arules::discretize(df.employee$WorkLifeBalance,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$WorkLifeBalance<-as.factor(df.employee$WorkLifeBalance)
+
+df.employee$EnvironmentSatisfaction<-arules::discretize(df.employee$EnvironmentSatisfaction,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$EnvironmentSatisfaction<-as.factor(df.employee$EnvironmentSatisfaction)
+
+df.employee$JobSatisfaction<-arules::discretize(df.employee$JobSatisfaction,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$JobSatisfaction<-as.factor(df.employee$JobSatisfaction)
+
+df.employee$StockOptionLevel<-arules::discretize(df.employee$StockOptionLevel,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$StockOptionLevel<-as.factor(df.employee$StockOptionLevel)
+
+df.employee$PerformanceRating<-arules::discretize(df.employee$PerformanceRating,breaks=2,label=c("Low","High"),method = "interval")
+df.employee$PerformanceRating<-as.factor(df.employee$PerformanceRating)
+
+df.employee$RelationshipSatisfaction<-arules::discretize(df.employee$RelationshipSatisfaction,breaks=2,label=c("Low","High"),method = "frequency")
+df.employee$RelationshipSatisfaction<-as.factor(df.employee$RelationshipSatisfaction)
+
+df.employee$Education<-arules::discretize(df.employee$Education,breaks=4,label=c("Uneducated","Basic Education","Highly Educated","Scholar"),method = "frequency")
+df.employee$Education<-as.factor(df.employee$Education)
+
+df.employee$JobLevel<-arules::discretize(df.employee$JobLevel,breaks=5,label=c("Junior Level","Upper Juinor Level","General Employee","Senior Level" ,"Managerial Level"),method = "interval")
+df.employee$JobLevel<-as.factor(df.employee$JobLevel)
+```
+## Association Rule Mining 
+### Finding columns that are Factors
+```{r}
+fac_var<-sapply(df.employee,is.factor)
+```
+### Converting Factor to Transaction
+```{r}
+trans<-as(df.employee[,fac_var],"transactions")
+```
+
+### Making Rules where there is Attrition
+```{r}
+Yes_attrition<-apriori(data=trans,parameter = list(support=0.01,conf=0.3),appearance = list(default="lhs",rhs=c("Attrition=Yes")))
+Yes_attrition<-head(sort(Yes_attrition,decreasing = T,by="lift"),5)
+inspect(head(sort(Yes_attrition,decreasing = T,by="lift"),5))
+```
+### Making Rules where there is no Attrition
+```{r}
+No_attrition<-apriori(data=trans,parameter = list(support=0.01,conf=0.3),appearance = list(default="lhs",rhs=c("Attrition=No")))
+No_attrition<-head(sort(No_attrition,decreasing = T,by="lift"),5)
+inspect(head(sort(No_attrition,decreasing = T,by="lift"),5))
+
+```
+
+### Plotting the association rule graph with attrition
+```{r}
+plot(Yes_attrition,method="graph")
+```
+
+####We can see that employees who don't work over time, have a high performance rating,don't have to travel often for business etc.Also Senior Employees who have attained a higher position and are well established within the company tend to stay in the company. These rules go along with our intuitive understanding of factors that would cause employees to stay, for example, employees who do not work too many hours and are well established within the company would naturally prefer to stay.Anothr Inference made is that employees who work in human resources tend to stay more as work load is usually lesser in comparison to other fields
+
+### Plotting the association rule graph where there is no attrition
+```{r}
+plot(No_attrition,method="graph")
+```
+
+###Viewing attrition on a paaracord
+```{r}
+plot(Yes_attrition,method="paracoord")
+```
+
+####Employees who have to work overtime,have low incomes/stock options,are in the early stages of their careers and have travel frequntlyhave a higher chance of leaving the company. This also goes along with our inituitive understanding, employees that spend long hours at work and aren't compensated highly are likely to look for opportunities elsewhere.Also intuitively women who are young and single who have few years of experience within the company tend to look for better opportunities
+
+###Viewing No attrition on a paaracord
+```{r}
+plot(No_attrition,method="paracoord")
+```
+
+### ItemFrequency 
+### Items with the most frequency
+```{r}
+itemFrequencyPlot(trans,topN=15,type="absolute",main="Frequency of most occuring items")
+```
+
