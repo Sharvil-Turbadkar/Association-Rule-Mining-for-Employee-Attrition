@@ -7,6 +7,7 @@ Link TO RPub Documentation:
 https://rpubs.com/Sharvil/employee-attrition
 
 ui.R is used to generate the shiny app which controls the layout and appearance of your app, 
+
 the other is server.R, which contains the instructions that your computer needs to build your app
 
 An HTML Document has also been knittd from a R Markdown File which is basically an R File  format for making dynamic documents with R.
